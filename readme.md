@@ -1,3 +1,1 @@
-Evaluation_NSP.py: train
-
-Evaluation_NSP_calc: calculate MI or/and NSP score
+## Applying Next Sentence Prediction and Mutual Information to Evaluate Open-Domain Dialogues in Latent Space
