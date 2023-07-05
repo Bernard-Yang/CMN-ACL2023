@@ -3,11 +3,11 @@ Code for the paper "Evaluating open-domain dialogues in latent space with next s
 
 Model can be found at this google drive folder https://drive.google.com/drive/u/1/folders/1qkqcJCprrBaLBdxgoP3dVuD_QInApLk1
 
-###Training commands
+### Training commands
 ```
 python Training.py --datasets [dd, personachat]
 ```
-###Evaluation commands
+### Evaluation commands
 ```
 python Evaluation.py --datasets [dd, personachat]
 ```
