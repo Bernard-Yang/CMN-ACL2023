@@ -1,0 +1,5 @@
+[CLS] what can i do for you, sir? i would like to have a pair of trousers made to measure. ok, may i take your size? [SEP] During fashion event, the designer follows different types of trouser in different size.
+[CLS] would you recommend some places for sightseeing? how about great canyon?is it worth seeing? [SEP] Singapore is reportedly a very exciting place to live.
+[CLS] you know, you really ought to get a new pair of jeans . those are falling to pieces.but this is how i like them, mum . they ’ re just beginning to look right. [SEP] The audience was becoming restless as they waited for the performance to begin.
+[CLS] excuse me, could you tell me how much is the lipstick?it costs only 25 yuan. oh, it's too expensive . can't you make it any cheaper? [SEP] I always line my lips with a dark brownish lip liner and fill in the center with a pale pink lipstick.
+[CLS] are you going to the party on saturday? i was thinking about it . are you?yeah, i heard it's going to be a lot of fun. [SEP] I think, due to a misunderstanding between worker and management, labor party is formed in our company.

@@ -37,7 +37,7 @@ from modules import VAE
 
 logger = logging.getLogger(__name__)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2ForLatentConnector, GPT2Tokenizer),
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
@@ -45,8 +45,11 @@ MODEL_CLASSES = {
     'roberta': (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer)
 }
 
-tokenizer_encoder = BertTokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/bert_tokenizer")
-tokenizer_decoder = GPT2Tokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/gpt2_tokenizer")
+# tokenizer_encoder = BertTokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/bert_tokenizer")
+# tokenizer_decoder = GPT2Tokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/gpt2_tokenizer")
+# tokenizer_encoder = BertTokenizer.from_pretrained("./pretrain/bert-base-uncased")
+tokenizer_encoder = BertTokenizer.from_pretrained("bert-base-uncased")
+tokenizer_decoder = GPT2Tokenizer.from_pretrained("gpt2")
 special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>'}
 num_added_toks = tokenizer_decoder.add_special_tokens(special_tokens_dict)
 eos_token_id = tokenizer_decoder.encode("<EOS>")[0]
@@ -58,13 +61,13 @@ bos_token_id = tokenizer_decoder.encode("<BOS>")[0]
 class Args(object):
     def __init__(self,
                  latent_size=32,
-                 fb_mode=0,
+                 fb_mode=3,
                  dim_target_kl=0.5,
                  length_weighted_loss=1,
                  beta=1,
                  mh_burn_in=1,
                  mh_thin=1,
-                 device="cuda"
+                 device="cuda" if torch.cuda.is_available() else 'cpu'
                  ):
         self.latent_size = latent_size
         self.fb_mode = fb_mode
@@ -454,118 +457,83 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--datasets", type=str, default="dd", help="[dd, cornellmovie, personachat, CMU_Dog]")
+    parser.add_argument("--datasets", type=str, default="dd", help="[dd, personachat]")
 
     config = parser.parse_args()
-    encoder = BertForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased", latent_size=32)
 
-    decoder = GPT2ForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/pytorch_model")
-    # language_model = GPT2ForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/pytorch_model")
+    encoder = BertForLatentConnector.from_pretrained("bert-base-uncased", latent_size=32)
+    decoder = GPT2ForLatentConnector.from_pretrained("gpt2")
+ 
+    condition_encoder = BertForLatentConnector.from_pretrained("bert-base-uncased", latent_size=32)
 
-
-    condition_encoder = BertForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased", latent_size=32)
-    # tokenizer_encoder = BertTokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/bert_tokenizer")
-    # tokenizer_decoder = GPT2Tokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/gpt2_tokenizer")
-    # special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>'}
-    # num_added_toks = tokenizer_decoder.add_special_tokens(special_tokens_dict)
-    # print('We have added', num_added_toks, 'tokens to GPT2')
     decoder.resize_token_embeddings(len(tokenizer_decoder))
     print(len(tokenizer_decoder))
     print(len(tokenizer_encoder))
     args = Args()
-    # NSP_model = BertForNextSentencePrediction.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased").cuda()
     model = VAE(encoder, decoder, tokenizer_encoder, tokenizer_decoder, args, condition_encoder).cuda()
-    # min_index = 0
-    # max_index = 50000
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
-    #
-    # epoch = 0
-    # first = 1
-    # rows_index = 0
-    # rows = np.arange(min_index, max_index)
-    # rows_dict = {}
-    # np.random.shuffle(rows)
+    min_index = 0
+    max_index = 50000
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
-    # eos_token_id = tokenizer_decoder.encode("<EOS>")[0]
-    # cls_token_id = tokenizer_encoder.encode("[CLS]")[0]
-    # sep_token_id = tokenizer_encoder.encode("[SEP]")[0]
-    # bos_token_id = tokenizer_decoder.encode("<BOS>")[0]
+    epoch = 0
+    first = 1
+    rows_index = 0
+    rows = np.arange(min_index, max_index)
+    rows_dict = {}
+    np.random.shuffle(rows)
 
-    # with open(f"./{config.datasets}/dataset.txt", "r", encoding="utf-8") as fp:
-    #     texts = fp.read().split('\n')
+    scores_lst = []
+
+    #file containing context and gold reference
+    with open(f"./{config.datasets}/con_ref.txt", "r", encoding="utf-8") as fp:
+        texts = fp.read().split('\n')
 
     checkpoint = torch.load(f"./{config.datasets}/Evaluation_NSP_modify.pkl")
     model.load_state_dict(checkpoint["model_state_dict"])
+    
+    #file containing context and generated response
+    with open(f"./{config.datasets}/con_res.txt", "r", encoding="utf-8") as fp:
+        gen_samples = fp.read().split('\n')
+ 
+    for m, batch in enumerate(gen_samples):
+        B_hat_index_list = np.random.randint(0, len(texts)-1, 10)
 
-    with open(f"./{config.datasets}/s2s_eval_samples.json", "r", encoding="utf-8") as f:
-        s2s_samples = json.load(f)
+        label_text = batch.split("[SEP]")[1].strip()
+        condition_text = batch.split("[SEP]")[0].strip()
+        log_s = \
+            f"conditions: {condition_text} \n"\
+            f"reference: {label_text}\n"
+        print(log_s)
+        mlog(log_s, config)
+        sentence_a = condition_text
+        response = label_text
+        condition_encoder_list = tokenizer_encoder.encode(sentence_a)
+        condition_encoder_list.insert(0, cls_token_id)
+        condition_encoder_list.append(sep_token_id)
 
-    with open(f"./{config.datasets}/hred_eval_samples.json", "r", encoding="utf-8") as f:
-        hred_samples = json.load(f)
+        response_encoder_list = tokenizer_encoder.encode(response)
+        response_encoder_list.insert(0, cls_token_id)
+        response_encoder_list.append(sep_token_id)
+        conditions = condition_text
+        sentence_b = response
+        NSP_eval(model, sentence_a, sentence_b, "original", config)
+        posterior_r = z_encoder(model, sentence_a, sentence_b)
+        conditions_list = torch.from_numpy(np.array(condition_encoder_list)).long().cuda().unsqueeze(0)
+        x = generator(model, conditions_list)
+        x = x.split("<BOS>")[1]
+        x = x.split("<EOS>")[0].strip()
+        prior_c = prior_z_encoder(model, condition_text)
+        MI_1 = MI_calculate(x, B_hat_index_list, condition_text, posterior_r, "OPTIMUS", config, texts, model, label_text)
+        MI_2 = MI_calculate_1(x, B_hat_index_list, condition_text, prior_c, "OPTIMUS", config, texts, model, label_text)
+        pred = NSP_eval(model, condition_text, x, "OPTIMUS", config)
+        score_1 = MI_1 + pred * MI_2
+        scores_lst.append(score_1)
+        log_s = f"score_1: {score_1}\n"
+        mlog(log_s, config)
+        score_2 = (1-pred) * MI_1 + pred * MI_2
+        log_s = f"score_2: {score_2}\n"
+        mlog(log_s, config)
+        print('scores_lst', scores_lst)
 
-    with open(f"./{config.datasets}/train.txt", "r", encoding="utf-8") as fp:
-        texts = fp.read().split('\n')
-    for m, batch in enumerate(s2s_samples["samples"]):
-        # print(1111211)
-        try:
-            B_hat_index_list = np.random.randint(0, len(texts)-1, 10)
-            # for B_hat_index in B_hat_index_list:
-
-            label_text = batch["reference"][1].strip()
-            condition_text = batch["context"][0][1].strip()
-            log_s = \
-                f"conditions: {condition_text} \n"\
-                f"reference: {label_text}\n"
-            mlog(log_s, config)
-            sentence_a = condition_text
-            response = label_text
-            condition_encoder_list = tokenizer_encoder.encode(sentence_a)
-            condition_encoder_list.insert(0, cls_token_id)
-            condition_encoder_list.append(sep_token_id)
-
-            response_encoder_list = tokenizer_encoder.encode(response)
-            response_encoder_list.insert(0, cls_token_id)
-            response_encoder_list.append(sep_token_id)
-            conditions = condition_text
-            sentence_b = response
-            NSP_eval(model, sentence_a, sentence_b, "original", config)
-            posterior_r = z_encoder(model, sentence_a, sentence_b)
-            conditions_list = torch.from_numpy(np.array(condition_encoder_list)).long().cuda().unsqueeze(0)
-            x = generator(model, conditions_list)
-            x = x.split("<BOS>")[1]
-            x = x.split("<EOS>")[0].strip()
-            prior_c = prior_z_encoder(model, condition_text)
-            MI_1 = MI_calculate(x, B_hat_index_list, condition_text, posterior_r, "OPTIMUS", config, texts, model, label_text)
-            MI_2 = MI_calculate_1(x, B_hat_index_list, condition_text, prior_c, "OPTIMUS", config, texts, model, label_text)
-            pred = NSP_eval(model, condition_text, x, "OPTIMUS", config)
-            score_1 = MI_1 + pred * MI_2
-            log_s = f"score_1: {score_1}\n"
-            mlog(log_s, config)
-            score_2 = (1-pred) * MI_1 + pred * MI_2
-            log_s = f"score_2: {score_2}\n"
-            mlog(log_s, config)
-
-            s2s_x = batch["hypothesis"][1].strip()
-            MI_1 = MI_calculate(s2s_x, B_hat_index_list, conditions, posterior_r, "s2s", config, texts, model, label_text)
-            MI_2 = MI_calculate_1(s2s_x, B_hat_index_list, condition_text, prior_c, "s2s", config, texts, model, label_text)
-            pred = NSP_eval(model, condition_text, s2s_x, "s2s", config)
-            score_1 = MI_1 + pred * MI_2
-            log_s = f"score_1: {score_1}\n"
-            mlog(log_s, config)
-            score_2 = (1-pred) * MI_1 + pred * MI_2
-            log_s = f"score_2: {score_2}\n"
-            mlog(log_s, config)
-
-            hred_x = hred_samples["samples"][m]["hypothesis"][1].strip()
-            MI_1 = MI_calculate(hred_x, B_hat_index_list, conditions, posterior_r, "hred", config, texts, model, label_text)
-            MI_2 = MI_calculate_1(hred_x, B_hat_index_list, conditions, prior_c, "hred", config, texts, model, label_text)
-            pred = NSP_eval(model, condition_text, hred_x, "hred", config)
-            score_1 = MI_1 + pred * MI_2
-            log_s = f"score_1: {score_1}\n"
-            mlog(log_s, config)
-            score_2 = (1-pred) * MI_1 + pred * MI_2
-            log_s = f"score_2: {score_2}\n"
-            mlog(log_s, config)
-        except:
-            pass
+    
 main()

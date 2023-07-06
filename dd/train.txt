@@ -1,0 +1,5 @@
+[CLS] hi , how are you doing ? i'm getting ready to do some cheetah chasing to stay in shape . [SEP] you must be very fast . hunting is one of my favorite hobbies .
+[CLS] you must be very fast . hunting is one of my favorite hobbies . [SEP] i am ! for my hobby i like to do canning or some whittling .
+[CLS] i am ! for my hobby i like to do canning or some whittling . [SEP] i also remodel homes when i am not out bow hunting .
+[CLS] i also remodel homes when i am not out bow hunting . [SEP] that's neat . when i was in high school i placed 6th in 100m dash !
+[CLS] that's neat . when i was in high school i placed 6th in 100m dash ! [SEP] that's awesome . do you have a favorite season or time of year ?

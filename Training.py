@@ -33,7 +33,7 @@ from modules import VAE
 
 logger = logging.getLogger(__name__)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 MODEL_CLASSES = {
     'gpt2': (GPT2Config, GPT2ForLatentConnector, GPT2Tokenizer),
     'openai-gpt': (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
@@ -45,7 +45,7 @@ MODEL_CLASSES = {
 class Args(object):
     def __init__(self,
                  latent_size=32,
-                 fb_mode=2,
+                 fb_mode=0,
                  dim_target_kl=0.5,
                  length_weighted_loss=1,
                  beta=1,
@@ -140,15 +140,13 @@ def main():
     parser.add_argument("--datasets", type=str, default="dd", help="[dd, cornellmovie, personachat, CMU_Dog]")
 
     config = parser.parse_args()
-    encoder = BertForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased", latent_size=32)
+    encoder = BertForLatentConnector.from_pretrained("bert-base-uncased", latent_size=32)
 
-    decoder = GPT2ForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/pytorch_model")
-    # language_model = GPT2ForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/pytorch_model")
+    decoder = GPT2ForLatentConnector.from_pretrained("gpt2")
 
-
-    condition_encoder = BertForLatentConnector.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased", latent_size=32)
-    tokenizer_encoder = BertTokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/bert_tokenizer")
-    tokenizer_decoder = GPT2Tokenizer.from_pretrained("/cuixiaohui/zk/Optimus-master/gpt2_tokenizer")
+    condition_encoder = BertForLatentConnector.from_pretrained("bert-base-uncased", latent_size=32)
+    tokenizer_encoder = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer_decoder = GPT2Tokenizer.from_pretrained("gpt2")
     special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>'}
     num_added_toks = tokenizer_decoder.add_special_tokens(special_tokens_dict)
     print('We have added', num_added_toks, 'tokens to GPT2')
@@ -156,52 +154,49 @@ def main():
     print(len(tokenizer_decoder))
     print(len(tokenizer_encoder))
     args = Args()
-    # NSP_model = BertForNextSentencePrediction.from_pretrained("/cuixiaohui/zk/Optimus-master/bert-base-uncased").cuda()
     model = VAE(encoder, decoder, tokenizer_encoder, tokenizer_decoder, args, condition_encoder).cuda()
     min_index = 0
-    with open(f"./{config.datasets}/train.txt", "r", encoding="utf-8") as fp:
-        texts = fp.read().split('\n')
 
-    max_index = len(texts) - 1
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     epoch = 0
     first = 1
     rows_index = 0
-    rows = np.arange(min_index, max_index)
-    rows_dict = {}
-    np.random.shuffle(rows)
+
 
     eos_token_id = tokenizer_decoder.encode("<EOS>")[0]
     cls_token_id = tokenizer_encoder.encode("[CLS]")[0]
     sep_token_id = tokenizer_encoder.encode("[SEP]")[0]
     bos_token_id = tokenizer_decoder.encode("<BOS>")[0]
 
+    with open(f"./{config.datasets}/train.txt", "r", encoding="utf-8") as fp:
+        texts = fp.read().split('\n')
 
+    max_index = len(texts) - 1
+    rows = np.arange(min_index, max_index)
+    rows_dict = {}
+    np.random.shuffle(rows)
     while epoch <= 20:
         torch.cuda.empty_cache()
         try:
-            checkpoint = torch.load(f"./{config.datasets}/Evaluation_NSP_no_nsp.pkl")
+            checkpoint = torch.load(f"./{config.datasets}/Evaluation_NSP_modify.pkl")
             first = 0
-            print("111")
+            print("Exist ckpt")
         except:
             first = 1
-            print("222")
+            print("No ckpt")
         if first == 1:
             flag = 1
             first = 0
             i = 0
             epoch = 0
-            print(333)
+            print("First training")
         else:
-            checkpoint = torch.load(f"./{config.datasets}/Evaluation_NSP_no_nsp.pkl")
+            checkpoint = torch.load(f"./{config.datasets}/Evaluation_NSP_modify.pkl")
             model.load_state_dict(checkpoint["model_state_dict"])
             flag = checkpoint["flag"]
-            #             first = 0
-            #             rows_index = checkpoint["rows_index"]
-            #             i = checkpoint['iter']
             epoch = checkpoint["epoch"]
-            print(444)
+            print("Load ckpt")
         if flag:
             i = 0
             rows_index = 0
@@ -210,28 +205,24 @@ def main():
             np.random.shuffle(rows)
             rows_dict["rows"] = rows.tolist()
             rows_json = json.dumps(rows_dict)
-            with open(f"./{config.datasets}/Evaluation_NSP_no_nsp.json", "w", encoding="utf-8") as f:
+            with open(f"./{config.datasets}/Evaluation_NSP_modify.json", "w", encoding="utf-8") as f:
                 f.write(rows_json)
-            print(555)
+            print("Shuffle")
         else:
             rows_index = checkpoint["rows_index"]
             i = checkpoint['iter']
             #             epoch = checkpoint["epoch"]
-            print(666)
+            print("Load ckpt and shuffle")
 
-            with open(f"./{config.datasets}/Evaluation_NSP_no_nsp.json", "r", encoding="utf-8") as f:
+            with open(f"./{config.datasets}/Evaluation_NSP_modify.json", "r", encoding="utf-8") as f:
                 rows_dict_str = f.read()
                 rows_dict = json.loads(rows_dict_str)
             rows = rows_dict['rows']
         rows = np.array(rows)
-        # train_data_gen = Dataloader(text_path=f"./{config.datasets}/datasets.txt",
-        #                             batch_size=16,
-        #                             min_index=min_index,
-        #                             max_index=max_index,
-        #                             rows_index=rows_index,
-        #                             rows=rows)
+        
+        #training data contraining context and gold reference
         train_data_gen = Dataloader(text_path=f"./{config.datasets}/train.txt",
-                                    batch_size=64,
+                                    batch_size=32,
                                     min_index=min_index,
                                     max_index=max_index,
                                     rows_index=rows_index,
@@ -254,7 +245,22 @@ def main():
                 response_decoder_list = tokenizer_decoder.encode(response)
                 response_decoder_list.insert(0, bos_token_id)
                 response_decoder_list.append(eos_token_id)
-                sentence_b = response
+
+                prob = random.uniform(0, 1)
+                if prob > 0.5:
+                    sentence_b = response
+                    label = 1
+                else:
+                    while True:
+                        try:
+                            index = random.randint(0, len(texts)-1)
+                            if texts[index] != train_data:
+                                sentence_b = texts[index].split("[SEP]")[1].strip()
+                                label = 0
+                                break
+                        except:
+                            pass
+
                 senetence_b_encoder_list = tokenizer_encoder.encode(sentence_b)
                 len_a = len(condition_encoder_list)
                 len_b = len(senetence_b_encoder_list) + 1
@@ -269,18 +275,27 @@ def main():
                     response_decoder = torch.from_numpy(np.array(response_decoder_list)).long().cuda().unsqueeze(0)
                     senetence_b_encoder = torch.from_numpy(np.array(senetence_b_encoder_list)).long().cuda().unsqueeze(0)
                     NSP_encoder = torch.from_numpy(np.array(NSP_encoder_list)).long().cuda().unsqueeze(0)
+                    label = torch.LongTensor([label]).cuda()
                     segments_tensor = torch.from_numpy(np.array(segments_tensor)).long().cuda().unsqueeze(0)
                     mask_tensor = torch.from_numpy(np.array(mask_tensor)).long().cuda().unsqueeze(0)
-                    rec_loss, loss_kl = model(response_encoder, response_decoder, condition_encoder,
-                                                              senetence_b_encoder, NSP_encoder, None,
+                    rec_loss, loss_kl, NSP_loss = model(response_encoder, response_decoder, condition_encoder,
+                                                              senetence_b_encoder, NSP_encoder, label,
                                                               segments_tensor, mask_tensor)
-                    loss = loss_kl + rec_loss
+
+                    if int(label.item()) == 1:
+                        loss = rec_loss + loss_kl + NSP_loss
+                        loss_kl_item = loss_kl.item()
+                        # neg_loss_kl = 0
+                    else:
+                        loss = rec_loss + NSP_loss
+                        # neg_loss_kl = beta * loss_kl.item()
+                        loss_kl_item = 0
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
                     if i % 32 == 0:
-                        print("epoch:", epoch, "iter:", i, "loss:", loss.item(), "loss_kl:", loss_kl.item(), "rec_loss:",
-                              rec_loss.item(), "rows:", rows_index, f"./{config.datasets}/Evaluation_NSP_no_nsp")
+                        print("epoch:", epoch, "iter:", i, "loss:", loss.item(), "loss_kl:", loss_kl_item, "rec_loss:",
+                              rec_loss.item(), "NSP_loss", NSP_loss.item(), "rows:", rows_index, f"./{config.datasets}/Evaluation_NSP_modify")
                     i = i + 1
                     if i % 1000 == 0:
                         checkpoint = {"model_state_dict": model.state_dict(),
@@ -289,9 +304,9 @@ def main():
                                       "epoch": epoch,
                                       "iter": i,
                                       "first": first}
-                        torch.save(checkpoint, f"./{config.datasets}/Evaluation_NSP_no_nsp.pkl")
+                        torch.save(checkpoint, f"./{config.datasets}/Evaluation_NSP_modify.pkl")
 
-        print(777)
+        print("Saved ckpt")
         epoch = epoch + 1
         checkpoint = {"model_state_dict": model.state_dict(),
                       "rows_index": rows_index,
@@ -299,6 +314,6 @@ def main():
                       "epoch": epoch,
                       "iter": 0,
                       "first": 0}
-        torch.save(checkpoint, f"./{config.datasets}/Evaluation_NSP_no_nsp.pkl")
+        torch.save(checkpoint, f"./{config.datasets}/Evaluation_NSP_modify.pkl")
 
 main()
