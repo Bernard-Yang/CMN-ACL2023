@@ -12,3 +12,12 @@ python Training.py --datasets [dd, personachat]
 ```
 python Evaluation.py --datasets [dd, personachat]
 ```
+
+### Citation
+If you found this repository or paper is helpful to you, please cite our paper.
+@article{zhao2023evaluating,
+  title={Evaluating Open-Domain Dialogues in Latent Space with Next Sentence Prediction and Mutual Information},
+  author={Zhao, Kun and Yang, Bohao and Lin, Chenghua and Rong, Wenge and Villavicencio, Aline and Cui, Xiaohui},
+  journal={arXiv preprint arXiv:2305.16967},
+  year={2023}
+}
